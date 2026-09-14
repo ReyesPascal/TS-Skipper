@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   Laptop,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { GatewayConfig } from '../types';
@@ -22,6 +23,7 @@ import {
   generateCaddyfile, 
   generateInstallScript, 
   generateUninstallScript,
+  generatePatchScript,
   generateReadme, 
   generateEnv 
 } from '../lib/templates';
@@ -31,7 +33,7 @@ interface DeploymentHubProps {
 }
 
 export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
-  const [activeTab, setActiveTab] = useState<'docker' | 'caddy' | 'install' | 'uninstall' | 'env' | 'readme'>('readme');
+  const [activeTab, setActiveTab] = useState<'docker' | 'caddy' | 'install' | 'patch' | 'uninstall' | 'env' | 'readme'>('readme');
   const [copiedFile, setCopiedFile] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [zipping, setZipping] = useState(false);
@@ -40,10 +42,12 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
   const caddyfileContent = generateCaddyfile(config);
   const installScriptContent = generateInstallScript(config);
   const uninstallScriptContent = generateUninstallScript(config);
+  const patchScriptContent = generatePatchScript(config);
   const readmeContent = generateReadme(config);
   const envContent = generateEnv(config);
 
   const oneLineInstall = `curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/install.sh | bash`;
+  const oneLinePatch = `curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/patch-uu.sh | bash`;
   const oneLineUninstall = `curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/uninstall.sh | bash`;
 
   const getCurrentContent = () => {
@@ -54,6 +58,8 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
         return caddyfileContent;
       case 'install':
         return installScriptContent;
+      case 'patch':
+        return patchScriptContent;
       case 'uninstall':
         return uninstallScriptContent;
       case 'env':
@@ -83,6 +89,7 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
       zip.file('docker-compose.yml', dockerComposeContent);
       zip.file('Caddyfile', caddyfileContent);
       zip.file('install.sh', installScriptContent);
+      zip.file('patch-uu.sh', patchScriptContent);
       zip.file('uninstall.sh', uninstallScriptContent);
       zip.file('README.md', readmeContent);
       zip.file('.env.example', envContent);
@@ -99,7 +106,7 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
       document.body.removeChild(a);
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
-      console.error('Error generating zip', err);
+      console.error('Failed to create ZIP', err);
     } finally {
       setZipping(false);
     }
@@ -183,6 +190,51 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
             className="absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 shadow-md shadow-purple-600/30 cursor-pointer"
           >
             {copiedCommand === 'oneliner-install' ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-white" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Hero: 1-Command Usenet Ultimate Auto-Patcher */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-slate-950 to-cyan-950/60 border border-indigo-800/50 space-y-3 shadow-lg">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-300">
+              <RefreshCw className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-tight">
+                ⚡ Simple One-Command Usenet Ultimate Auto-Patcher
+              </h3>
+              <p className="text-[11px] text-indigo-300/80">
+                Automatically finds your <code className="text-cyan-300 font-mono">~/usenet-ultimate</code> folder, updates <code className="text-emerald-300 font-mono">UU_BASE_URL</code>, sets <code className="text-emerald-300 font-mono">NZBDAV_PROXY_ENABLED=true</code>, and reloads the container.
+              </p>
+            </div>
+          </div>
+
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            Apple ATS Required
+          </span>
+        </div>
+
+        <div className="relative group">
+          <pre className="bg-slate-950 border border-indigo-900/60 p-3.5 rounded-xl text-xs font-mono text-indigo-200 overflow-x-auto select-all pr-24 leading-relaxed">
+            {oneLinePatch}
+          </pre>
+          <button
+            onClick={() => handleCopyCommand(oneLinePatch, 'oneliner-patch')}
+            className="absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 shadow-md shadow-indigo-600/30 cursor-pointer"
+          >
+            {copiedCommand === 'oneliner-patch' ? (
               <>
                 <Check className="w-3.5 h-3.5 text-white" />
                 <span>Copied!</span>
@@ -386,6 +438,18 @@ docker compose up -d`}
             >
               <Terminal className="w-3.5 h-3.5 text-emerald-400" />
               install.sh (Installer)
+            </button>
+
+            <button
+              onClick={() => setActiveTab('patch')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'patch'
+                  ? 'bg-slate-800 text-white border border-slate-700'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              patch-uu.sh (Auto-Patcher)
             </button>
 
             <button

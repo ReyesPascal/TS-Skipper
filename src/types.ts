@@ -56,4 +56,6 @@ export interface PatchResult {
   filePath?: string;
   previousBaseUrl?: string;
   newBaseUrl?: string;
+  bashCommand?: string;
+  fileWritten?: boolean;
 }

@@ -123,58 +123,59 @@ app.post('/api/system/patch-usenet-ultimate', (req: Request, res: Response) => {
       targetDir = homeDir;
     }
 
-    // Check fallback paths if directory not found
-    if (!fs.existsSync(targetDir)) {
-      const fallbackRyan = '/home/ryan/usenet-ultimate';
-      if (fs.existsSync(fallbackRyan)) {
-        targetDir = fallbackRyan;
-      } else {
-        return res.status(404).json({
-          success: false,
-          message: `Directory "${targetDir}" not found on this system. Please check path.`,
-        });
-      }
-    }
-
-    const envPath = path.join(targetDir, '.env');
+    // Check if target directory exists on disk
+    let fileWritten = false;
+    let envPath = path.join(targetDir, '.env');
     let previousBaseUrl = 'not set';
 
-    if (fs.existsSync(envPath)) {
-      let content = fs.readFileSync(envPath, 'utf8');
-      const prevMatch = content.match(/UU_BASE_URL=(.*)/);
-      if (prevMatch) {
-        previousBaseUrl = prevMatch[1].trim();
-        content = content.replace(/UU_BASE_URL=.*/, `UU_BASE_URL=${newBaseUrl}`);
+    if (fs.existsSync(targetDir)) {
+      if (fs.existsSync(envPath)) {
+        let content = fs.readFileSync(envPath, 'utf8');
+        const prevMatch = content.match(/UU_BASE_URL=(.*)/);
+        if (prevMatch) {
+          previousBaseUrl = prevMatch[1].trim();
+          content = content.replace(/UU_BASE_URL=.*/, `UU_BASE_URL=${newBaseUrl}`);
+        } else {
+          content += `\nUU_BASE_URL=${newBaseUrl}\n`;
+        }
+
+        if (!content.includes('NZBDAV_PROXY_ENABLED=')) {
+          content += `NZBDAV_PROXY_ENABLED=true\n`;
+        }
+
+        fs.writeFileSync(envPath, content, 'utf8');
+        fileWritten = true;
       } else {
-        content += `\nUU_BASE_URL=${newBaseUrl}\n`;
+        const newEnvContent = `# Configured by TS-Skipper Auto-Patcher\nUU_BASE_URL=${newBaseUrl}\nNZBDAV_PROXY_ENABLED=true\nNZBDAV_NETWORK=existing_nzbdav_network\n`;
+        fs.writeFileSync(envPath, newEnvContent, 'utf8');
+        fileWritten = true;
       }
-
-      // Ensure NZBDAV_PROXY_ENABLED is set
-      if (!content.includes('NZBDAV_PROXY_ENABLED=')) {
-        content += `NZBDAV_PROXY_ENABLED=true\n`;
-      }
-
-      fs.writeFileSync(envPath, content, 'utf8');
-      return res.json({
-        success: true,
-        message: `Successfully updated UU_BASE_URL to ${newBaseUrl} in ${envPath}`,
-        filePath: envPath,
-        previousBaseUrl,
-        newBaseUrl,
-      });
     } else {
-      // Create .env file with appropriate settings
-      const newEnvContent = `# Created by TS-Skipper Auto-Patcher\nUU_BASE_URL=${newBaseUrl}\nNZBDAV_PROXY_ENABLED=true\nNZBDAV_NETWORK=existing_nzbdav_network\n`;
-      fs.writeFileSync(envPath, newEnvContent, 'utf8');
-
-      return res.json({
-        success: true,
-        message: `Created ${envPath} and set UU_BASE_URL=${newBaseUrl}`,
-        filePath: envPath,
-        previousBaseUrl: 'none',
-        newBaseUrl,
-      });
+      // In cloud preview environment or container without ~/usenet-ultimate mounted,
+      // create a mock/sandbox file so preview testing works cleanly
+      const sandboxDir = path.join(process.cwd(), '.sandbox-uu');
+      if (!fs.existsSync(sandboxDir)) {
+        fs.mkdirSync(sandboxDir, { recursive: true });
+      }
+      const sandboxEnv = path.join(sandboxDir, '.env');
+      const sandboxContent = `# Configured by TS-Skipper Auto-Patcher\nUU_BASE_URL=${newBaseUrl}\nNZBDAV_PROXY_ENABLED=true\nNZBDAV_NETWORK=existing_nzbdav_network\n`;
+      fs.writeFileSync(sandboxEnv, sandboxContent, 'utf8');
+      envPath = path.join(targetDir, '.env');
     }
+
+    const bashCommand = `sed -i "s|UU_BASE_URL=.*|UU_BASE_URL=${newBaseUrl}|g" "${targetDir}/.env" 2>/dev/null || echo "UU_BASE_URL=${newBaseUrl}" >> "${targetDir}/.env" && (cd "${targetDir}" && docker compose up -d usenet-ultimate || true)`;
+
+    return res.json({
+      success: true,
+      fileWritten,
+      message: fileWritten 
+        ? `Successfully updated UU_BASE_URL=${newBaseUrl} in ${envPath}!`
+        : `Ready for ${targetDir}! Copy the one-line terminal command to apply instantly on your Ubuntu laptop.`,
+      filePath: envPath,
+      previousBaseUrl,
+      newBaseUrl,
+      bashCommand,
+    });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error during patch';
     return res.status(500).json({ success: false, message: errorMsg });

@@ -291,6 +291,36 @@ cat <<'EOF' > "${INSTALL_DIR}/www/index.html"
       </ol>
     </div>
 
+    <!-- Usenet Ultimate Auto-Patcher Box -->
+    <div class="p-6 bg-slate-900 border border-indigo-900/50 rounded-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">⚡</span>
+          <div>
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Auto-Configure Usenet Ultimate (UU_BASE_URL)</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Required so Stremio on Apple TV / iPhone gets HTTPS stream URLs that pass Apple ATS without Tailscale.</p>
+          </div>
+        </div>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Apple ATS Required</span>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <span class="text-[11px] text-purple-300 font-semibold block mb-1">1-Command Terminal Auto-Patcher:</span>
+          <div class="relative">
+            <pre id="patch-cmd-box" class="p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-purple-300 font-mono select-all overflow-x-auto pr-24">curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/patch-uu.sh | bash</pre>
+            <button onclick="copyPatchCmd()" id="copy-patch-btn" class="absolute top-2 right-2 px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all">Copy</button>
+          </div>
+        </div>
+
+        <div>
+          <span class="text-[11px] text-slate-400 font-semibold block mb-1">Target Setting in ~/usenet-ultimate/.env:</span>
+          <pre id="env-preview" class="p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-emerald-300 font-mono select-all">UU_BASE_URL=https://192-168-4-40.sslip.io:8443
+NZBDAV_PROXY_ENABLED=true</pre>
+        </div>
+      </div>
+    </div>
+
     <!-- Command Tools: Install & Uninstall -->
     <div class="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
       <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -302,6 +332,13 @@ cat <<'EOF' > "${INSTALL_DIR}/www/index.html"
           <label class="text-[11px] text-slate-400 font-medium block mb-1">One-Line Update / Reinstall:</label>
           <div class="p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-purple-300 select-all">
             curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/install.sh | bash
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] text-cyan-400 font-medium block mb-1">One-Line Usenet Ultimate Auto-Patcher:</label>
+          <div class="p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-cyan-300 select-all">
+            curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/patch-uu.sh | bash
           </div>
         </div>
 
@@ -337,10 +374,87 @@ cat <<'EOF' > "${INSTALL_DIR}/www/index.html"
         btn.innerHTML = '<span>Copy URL</span>';
       }, 2000);
     }
+
+    function copyPatchCmd() {
+      const cmd = document.getElementById('patch-cmd-box').innerText;
+      navigator.clipboard.writeText(cmd);
+      const btn = document.getElementById('copy-patch-btn');
+      btn.innerText = '✓ Copied!';
+      setTimeout(() => {
+        btn.innerText = 'Copy';
+      }, 2000);
+    }
   </script>
 </body>
 </html>
 EOF
+
+# Write local Usenet Ultimate auto-patch script
+cat <<'EOF' > "${INSTALL_DIR}/patch-uu.sh"
+#!/usr/bin/env bash
+set -euo pipefail
+
+GATEWAY_PORT="8443"
+LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+if [ -z "$LAN_IP" ]; then
+    LAN_IP="192.168.4.40"
+fi
+DASHED_IP=$(echo "$LAN_IP" | tr '.' '-')
+DOMAIN="${DASHED_IP}.sslip.io"
+NEW_BASE_URL="https://${DOMAIN}:${GATEWAY_PORT}"
+
+echo "=========================================================="
+echo "⚡ Auto-Updating Usenet Ultimate UU_BASE_URL"
+echo "Target Base URL: $NEW_BASE_URL"
+echo "=========================================================="
+
+UU_DIR="${HOME}/usenet-ultimate"
+if [ ! -d "$UU_DIR" ] && [ -d "/home/ryan/usenet-ultimate" ]; then
+    UU_DIR="/home/ryan/usenet-ultimate"
+fi
+
+if [ ! -d "$UU_DIR" ]; then
+    echo "⚠️  ~/usenet-ultimate not found. Checking custom directory..."
+    if [ -t 0 ]; then
+        read -r -p "Enter path to usenet-ultimate folder: " USER_DIR
+        if [ -n "$USER_DIR" ]; then
+            UU_DIR="${USER_DIR/#\~/$HOME}"
+        fi
+    fi
+fi
+
+if [ ! -d "$UU_DIR" ]; then
+    echo "❌ Could not find usenet-ultimate folder. Set UU_BASE_URL=$NEW_BASE_URL manually in your .env"
+    exit 1
+fi
+
+UU_ENV="$UU_DIR/.env"
+if [ -f "$UU_ENV" ]; then
+    if grep -q "UU_BASE_URL=" "$UU_ENV"; then
+        sed -i "s|UU_BASE_URL=.*|UU_BASE_URL=${NEW_BASE_URL}|g" "$UU_ENV"
+    else
+        echo "UU_BASE_URL=${NEW_BASE_URL}" >> "$UU_ENV"
+    fi
+    if ! grep -q "NZBDAV_PROXY_ENABLED=" "$UU_ENV"; then
+        echo "NZBDAV_PROXY_ENABLED=true" >> "$UU_ENV"
+    fi
+    echo "✅ Successfully updated $UU_ENV"
+else
+    cat <<ENV_EOF > "$UU_ENV"
+UU_BASE_URL=${NEW_BASE_URL}
+NZBDAV_PROXY_ENABLED=true
+NZBDAV_NETWORK=existing_nzbdav_network
+ENV_EOF
+    echo "✅ Successfully created $UU_ENV"
+fi
+
+if [ -f "$UU_DIR/docker-compose.yml" ]; then
+    echo "🔄 Reloading usenet-ultimate container..."
+    (cd "$UU_DIR" && docker compose up -d usenet-ultimate || true)
+fi
+echo "🎉 Usenet Ultimate is now configured with TLS for Apple ATS!"
+EOF
+chmod +x "${INSTALL_DIR}/patch-uu.sh"
 
 # Write local uninstall script
 cat <<'EOF' > "${INSTALL_DIR}/uninstall.sh"
