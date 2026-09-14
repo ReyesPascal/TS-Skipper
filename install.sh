@@ -463,9 +463,11 @@ set -euo pipefail
 echo "🛑 Stopping and removing TS-Skipper..."
 cd "$(dirname "$0")"
 docker compose down -v --remove-orphans || true
-sudo ufw delete allow 8443/tcp || true
-sudo ufw delete allow 3002/tcp || true
-rm -rf "$HOME/TS-Skipper"
+sudo ufw delete allow 8443/tcp >/dev/null 2>&1 || true
+sudo ufw delete allow 3002/tcp >/dev/null 2>&1 || true
+TARGET_DIR="$(pwd)"
+cd "$HOME"
+rm -rf "$TARGET_DIR" 2>/dev/null || sudo rm -rf "$TARGET_DIR" || true
 echo "✅ TS-Skipper completely removed. Your Usenet containers are untouched."
 EOF
 chmod +x "${INSTALL_DIR}/uninstall.sh"

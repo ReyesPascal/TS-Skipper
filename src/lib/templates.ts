@@ -681,9 +681,11 @@ set -euo pipefail
 echo "🛑 Stopping and removing TS-Skipper..."
 cd "$(dirname "\$0")"
 docker compose down -v --remove-orphans || true
-sudo ufw delete allow ${config.gatewayPort}/tcp || true
-sudo ufw delete allow ${config.guiPort}/tcp || true
-rm -rf "\$HOME/TS-Skipper"
+sudo ufw delete allow ${config.gatewayPort}/tcp >/dev/null 2>&1 || true
+sudo ufw delete allow ${config.guiPort}/tcp >/dev/null 2>&1 || true
+TARGET_DIR="$(pwd)"
+cd "\$HOME"
+rm -rf "\$TARGET_DIR" 2>/dev/null || sudo rm -rf "\$TARGET_DIR" || true
 echo "✅ TS-Skipper completely removed. Your Usenet containers are untouched."
 EOF
 chmod +x "\${INSTALL_DIR}/uninstall.sh"
@@ -856,7 +858,14 @@ echo "🛑 Uninstalling TS-Skipper (Tailscale Skipper)..."
 echo "Repository: https://github.com/ReyesPascal/TS-Skipper"
 echo "=========================================================="
 
-INSTALL_DIR="\${HOME}/TS-Skipper"
+# Detect correct user home directory (even if invoked via sudo bash)
+TARGET_USER="\${SUDO_USER:-\$USER}"
+TARGET_HOME=\$(getent passwd "\$TARGET_USER" 2>/dev/null | cut -d: -f6 || eval echo "~\${TARGET_USER}")
+INSTALL_DIR="\${TARGET_HOME}/TS-Skipper"
+
+if [ ! -d "\$INSTALL_DIR" ] && [ -d "/home/ryan/TS-Skipper" ]; then
+    INSTALL_DIR="/home/ryan/TS-Skipper"
+fi
 
 # 1. Stop and remove Docker containers
 if [ -d "\$INSTALL_DIR" ] && [ -f "\$INSTALL_DIR/docker-compose.yml" ]; then
@@ -875,9 +884,21 @@ sudo ufw delete allow ${config.gatewayPort}/tcp >/dev/null 2>&1 || true
 sudo ufw delete allow ${config.guiPort}/tcp >/dev/null 2>&1 || true
 
 # 3. Remove TS-Skipper folder
+# Note: Caddy Docker container creates root-owned files in caddy_data & caddy_config
 if [ -d "\$INSTALL_DIR" ]; then
     echo "🗑️ Removing \${INSTALL_DIR} directory..."
-    rm -rf "\$INSTALL_DIR"
+    if ! rm -rf "\$INSTALL_DIR" 2>/dev/null; then
+        echo "🔐 Root-owned files created by Docker container detected (caddy_data/caddy_config)."
+        echo "   Elevating to sudo to delete remaining files..."
+        sudo rm -rf "\$INSTALL_DIR" || true
+    fi
+    
+    if [ -d "\$INSTALL_DIR" ]; then
+        echo "⚠️ Could not delete all files automatically."
+        echo "💡 Run manually to finish: sudo rm -rf \${INSTALL_DIR}"
+    else
+        echo "✅ Directory \${INSTALL_DIR} successfully removed."
+    fi
 fi
 
 echo ""
