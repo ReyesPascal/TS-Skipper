@@ -1,12 +1,10 @@
 export interface GatewayConfig {
   serverIp: string;
-  guiPort: number; // 3002 (so it does not conflict with nzbdav on 3000)
+  guiPort: number; // 3002 (so it never conflicts with nzbdav on 3000)
   gatewayPort: number; // 8443 (Caddy HTTPS for Apple ATS)
-  nzbDavPort: number; // 3000 (from your nzbdav docker-compose.yml)
-  usenetUltimatePort: number; // 1337 (from your usenet-ultimate docker-compose.yml)
-  sabnzbdPort: number; // 8080
-  prowlarrPort: number; // 9696
-  lidarrPort: number; // 8686
+  nzbDavPort: number; // 3000 (from your existing nzbdav container)
+  usenetUltimatePort: number; // 1337 (from your existing usenet-ultimate container)
+  usenetUltimateDir: string; // e.g. /home/ryan/usenet-ultimate or ~/usenet-ultimate
   domainMode: 'sslip' | 'local_ip' | 'duckdns' | 'custom';
   customDomain: string;
   duckDnsToken: string;
@@ -17,7 +15,7 @@ export interface GatewayConfig {
   usenetProviderHost: string;
   usenetProviderPort: number;
   useSslNntp: boolean;
-  dockerNetworkName: string; // e.g. existing_nzbdav_network
+  dockerNetworkName: string;
 }
 
 export interface AtsCheckResult {
@@ -50,4 +48,12 @@ export interface AppConfigGuide {
     explanation: string;
     critical?: boolean;
   }[];
+}
+
+export interface PatchResult {
+  success: boolean;
+  message: string;
+  filePath?: string;
+  previousBaseUrl?: string;
+  newBaseUrl?: string;
 }

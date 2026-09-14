@@ -66,48 +66,30 @@ export const UsenetAppsGuide: React.FC<UsenetAppsGuideProps> = ({ config }) => {
         </div>
       </div>
 
-      {/* Port Allocation Callout Banner */}
-      <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 text-center">
-        <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+      {/* Port Allocation Callout Banner - Pure Usenet Focus */}
+      <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+        <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
           <span className="text-[10px] text-slate-400 block font-mono">GUI Dashboard</span>
-          <span className="text-xs font-bold text-cyan-400 font-mono">:{config.guiPort}</span>
-          <span className="text-[9px] text-emerald-400 block font-sans mt-0.5">Active</span>
+          <span className="text-sm font-bold text-cyan-400 font-mono">:{config.guiPort}</span>
+          <span className="text-[10px] text-emerald-400 block font-sans mt-0.5">Active</span>
         </div>
 
-        <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-          <span className="text-[10px] text-slate-400 block font-mono">nzbdav</span>
-          <span className="text-xs font-bold text-indigo-400 font-mono">:{config.nzbDavPort}</span>
-          <span className="text-[9px] text-slate-500 block font-sans mt-0.5">Preserved</span>
+        <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
+          <span className="text-[10px] text-slate-400 block font-mono">nzbdav (WebDAV)</span>
+          <span className="text-sm font-bold text-indigo-400 font-mono">:{config.nzbDavPort}</span>
+          <span className="text-[10px] text-indigo-300 block font-sans mt-0.5">Preserved</span>
         </div>
 
-        <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+        <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
           <span className="text-[10px] text-slate-400 block font-mono">usenet-ultimate</span>
-          <span className="text-xs font-bold text-purple-400 font-mono">:{config.usenetUltimatePort}</span>
-          <span className="text-[9px] text-slate-500 block font-sans mt-0.5">Preserved</span>
+          <span className="text-sm font-bold text-purple-400 font-mono">:{config.usenetUltimatePort}</span>
+          <span className="text-[10px] text-purple-300 block font-sans mt-0.5">Preserved</span>
         </div>
 
-        <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+        <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
           <span className="text-[10px] text-slate-400 block font-mono">Caddy Gateway</span>
-          <span className="text-xs font-bold text-emerald-400 font-mono">:{config.gatewayPort}</span>
-          <span className="text-[9px] text-emerald-400 block font-sans mt-0.5">TLS / ATS</span>
-        </div>
-
-        <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-          <span className="text-[10px] text-slate-400 block font-mono">sabnzbd</span>
-          <span className="text-xs font-bold text-amber-400 font-mono">:{config.sabnzbdPort}</span>
-          <span className="text-[9px] text-slate-500 block font-sans mt-0.5">Untouched</span>
-        </div>
-
-        <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-          <span className="text-[10px] text-slate-400 block font-mono">prowlarr</span>
-          <span className="text-xs font-bold text-cyan-400 font-mono">:{config.prowlarrPort}</span>
-          <span className="text-[9px] text-slate-500 block font-sans mt-0.5">Untouched</span>
-        </div>
-
-        <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-          <span className="text-[10px] text-slate-400 block font-mono">lidarr</span>
-          <span className="text-xs font-bold text-blue-400 font-mono">:{config.lidarrPort}</span>
-          <span className="text-[9px] text-slate-500 block font-sans mt-0.5">Untouched</span>
+          <span className="text-sm font-bold text-emerald-400 font-mono">:{config.gatewayPort}</span>
+          <span className="text-[10px] text-emerald-400 block font-sans mt-0.5">TLS / ATS Safe</span>
         </div>
       </div>
 

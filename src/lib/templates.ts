@@ -325,33 +325,135 @@ echo "🔍 Detected Host IP: \$LAN_IP"
 echo "🌐 Resolved Domain:  \$DOMAIN"
 
 # 4. Open UFW firewall ports
-echo "🛡️ Step 4: Configuring local firewall..."
+echo "🛡️ Step 3: Configuring local firewall..."
 sudo ufw allow ${config.gatewayPort}/tcp comment "TS-Skipper HTTPS Gateway"
 sudo ufw allow 80/tcp comment "Caddy TLS Verification"
 sudo ufw allow ${config.guiPort}/tcp comment "TS-Skipper Local GUI"
 sudo ufw status verbose | grep -E "${config.gatewayPort}|80|${config.guiPort}" || true
 
-# 5. Start Docker Compose Stack if docker-compose.yml exists
-if [ -f "docker-compose.yml" ]; then
-    echo "🚀 Step 5: Starting Docker services..."
-    docker compose up -d
+# 5. Automatically patch UU_BASE_URL in Usenet Ultimate directory
+echo ""
+echo "⚙️ Step 4: Automatically configuring Usenet Ultimate for Apple ATS..."
+UU_DIR="\${HOME}/usenet-ultimate"
+
+if [ ! -d "\$UU_DIR" ] && [ -d "/home/ryan/usenet-ultimate" ]; then
+    UU_DIR="/home/ryan/usenet-ultimate"
 fi
+
+if [ ! -d "\$UU_DIR" ]; then
+    echo "⚠️  Could not find Usenet Ultimate in default path (~/usenet-ultimate)."
+    if [ -t 0 ]; then
+        read -r -p "Enter path to your usenet-ultimate folder (or press Enter to skip): " USER_INPUT_DIR
+        if [ -n "\$USER_INPUT_DIR" ]; then
+            UU_DIR="\${USER_INPUT_DIR/#\\~/\$HOME}"
+        fi
+    fi
+fi
+
+if [ -d "\$UU_DIR" ]; then
+    echo "📁 Found Usenet Ultimate directory at: \$UU_DIR"
+    UU_ENV="\$UU_DIR/.env"
+    NEW_BASE_URL="https://\${DOMAIN}:${config.gatewayPort}"
+
+    if [ -f "\$UU_ENV" ]; then
+        if grep -q "UU_BASE_URL=" "\$UU_ENV"; then
+            sed -i "s|UU_BASE_URL=.*|UU_BASE_URL=\${NEW_BASE_URL}|g" "\$UU_ENV"
+        else
+            echo "UU_BASE_URL=\${NEW_BASE_URL}" >> "\$UU_ENV"
+        fi
+        
+        if ! grep -q "NZBDAV_PROXY_ENABLED=" "\$UU_ENV"; then
+            echo "NZBDAV_PROXY_ENABLED=true" >> "\$UU_ENV"
+        fi
+        echo "✅ Updated \$UU_ENV with UU_BASE_URL=\${NEW_BASE_URL}"
+    else
+        cat <<EOF > "\$UU_ENV"
+# Configured by TS-Skipper
+UU_BASE_URL=\${NEW_BASE_URL}
+NZBDAV_PROXY_ENABLED=true
+NZBDAV_NETWORK=existing_nzbdav_network
+EOF
+        echo "✅ Created \$UU_ENV with UU_BASE_URL=\${NEW_BASE_URL}"
+    fi
+
+    if [ -f "\$UU_DIR/docker-compose.yml" ]; then
+        echo "🔄 Reloading usenet-ultimate container with new TLS base URL..."
+        (cd "\$UU_DIR" && docker compose up -d usenet-ultimate || true)
+    fi
+fi
+
+# 6. Deploy TS-Skipper in its own dedicated directory (Isolated from sab/prowlarr/lidarr!)
+INSTALL_DIR="\${HOME}/TS-Skipper"
+echo ""
+echo "📦 Step 5: Preparing TS-Skipper in \${INSTALL_DIR}..."
+mkdir -p "\${INSTALL_DIR}"
+cd "\${INSTALL_DIR}"
+
+cat <<EOF > "\${INSTALL_DIR}/Caddyfile"
+\${DOMAIN}:${config.gatewayPort} {
+  header {
+    Access-Control-Allow-Origin *
+    Access-Control-Allow-Methods "GET, POST, OPTIONS, HEAD"
+    Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Range, Authorization"
+    Access-Control-Expose-Headers "Content-Length, Content-Range, Accept-Ranges"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  }
+
+  handle /manifest.json {
+    reverse_proxy host.docker.internal:${config.usenetUltimatePort}
+  }
+
+  handle /stream/* {
+    reverse_proxy host.docker.internal:${config.nzbDavPort}
+  }
+
+  handle /webdav/* {
+    reverse_proxy host.docker.internal:${config.nzbDavPort}
+  }
+
+  handle {
+    reverse_proxy host.docker.internal:${config.usenetUltimatePort}
+  }
+}
+EOF
+
+cat <<EOF > "\${INSTALL_DIR}/docker-compose.yml"
+services:
+  ts-skipper-caddy:
+    image: caddy:2-alpine
+    container_name: ts-skipper-caddy
+    restart: unless-stopped
+    ports:
+      - "${config.gatewayPort}:${config.gatewayPort}"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  caddy_data:
+  caddy_config:
+EOF
+
+echo "🚀 Starting TS-Skipper Caddy Gateway..."
+docker compose up -d
 
 echo ""
 echo "=========================================================="
-echo "🎉 SUCCESS: TS-Skipper is Running on Port ${config.guiPort}!"
+echo "🎉 SUCCESS: TS-Skipper is Online on Port ${config.guiPort}!"
 echo "=========================================================="
 echo "🖥️  Localhost GUI: http://localhost:${config.guiPort}"
 echo "🌐 Network GUI:   http://\${LAN_IP}:${config.guiPort}"
 echo "🔒 HTTPS Gateway: https://\${DOMAIN}:${config.gatewayPort}"
 echo "📺 Stremio URL:   https://\${DOMAIN}:${config.gatewayPort}/manifest.json"
 echo ""
-echo "✨ Your existing containers are untouched:"
-echo "   - nzbdav:        port ${config.nzbDavPort} (preserved!)"
+echo "✨ Usenet Services (Zero Conflict):"
+echo "   - nzbdav:          port ${config.nzbDavPort} (untouched)"
 echo "   - usenet-ultimate: port ${config.usenetUltimatePort} (proxied to ${config.gatewayPort})"
-echo "   - sabnzbd:       port ${config.sabnzbdPort}"
-echo "   - prowlarr:      port ${config.prowlarrPort}"
-echo "   - lidarr:        port ${config.lidarrPort}"
+echo "   - sab/prowlarr/lidarr: completely ignored!"
 echo ""
 echo "📱 WHAT TO PUT INTO STREMIO (Apple TV / iPhone / Smart TV):"
 echo "1. In Stremio, go to Addons > Community Addons"
@@ -401,12 +503,10 @@ TS-Skipper works seamlessly with your existing setup without conflicts:
 | Service | Container Image | Port | Notes |
 | :--- | :--- | :--- | :--- |
 | **TS-Skipper GUI** | \`reyespascal/ts-skipper\` | **${config.guiPort}** | Localhost management GUI |
-| **TS-Skipper Caddy** | \`caddy:2-alpine\` | **${config.gatewayPort}** | Solves Apple ATS for Stremio |
+| **TS-Skipper Caddy** | \`caddy:2-alpine\` | **${config.gatewayPort}** | Solves Apple ATS for Stremio (TLS) |
 | **NZB-DAV** | \`nzbdav/nzbdav:latest\` | **3000** | Preserved from your compose |
-| **Usenet Ultimate** | \`ghcr.io/dsmart33/usenet-ultimate\` | **1337** | Preserved from your compose |
-| **SABnzbd** | \`linuxserver/sabnzbd\` | **8080** | Untouched |
-| **Prowlarr** | \`linuxserver/prowlarr\` | **9696** | Untouched |
-| **Lidarr** | \`linuxserver/lidarr\` | **8686** | Untouched |
+| **Usenet Ultimate** | \`ghcr.io/dsmart33/usenet-ultimate\` | **1337** | Preserved & patched with gateway base URL |
+| **SABnzbd / Prowlarr / Lidarr** | *Any* | *Untouched* | **Completely ignored** to avoid Docker conflicts |
 
 ---
 
@@ -479,9 +579,8 @@ GATEWAY_PORT=${config.gatewayPort}
 # Existing container ports on ryan@Brain:
 NZBDAV_PORT=${config.nzbDavPort}
 USENET_ULTIMATE_PORT=${config.usenetUltimatePort}
-SABNZBD_PORT=${config.sabnzbdPort}
-PROWLARR_PORT=${config.prowlarrPort}
-LIDARR_PORT=${config.lidarrPort}
+
+# Note: SABnzbd, Prowlarr, and Lidarr are ignored to prevent Docker container conflicts.
 
 # Usenet NNTP Provider Details
 NNTP_HOST=${config.usenetProviderHost || 'news.usenetserver.com'}

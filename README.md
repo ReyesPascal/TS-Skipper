@@ -39,10 +39,8 @@ TS-Skipper fits directly into your existing configuration without needing to reb
 | **TS-Skipper GUI** | `ghcr.io/reyespascal/ts-skipper` | **3002** | Localhost management web interface |
 | **TS-Skipper Caddy** | `caddy:2-alpine` | **8443** | Solves Apple ATS for Stremio via TLS |
 | **NZB-DAV** | `nzbdav/nzbdav:latest` | **3000** | Preserved from `/home/ryan/docker-compose.yml` |
-| **Usenet Ultimate** | `ghcr.io/dsmart33/usenet-ultimate` | **1337** | Preserved from `~/usenet-ultimate/docker-compose.yml` |
-| **SABnzbd** | `linuxserver/sabnzbd:latest` | **8080** | Untouched from `/home/ryan/docker-compose.yml` |
-| **Prowlarr** | `linuxserver/prowlarr:latest` | **9696** | Untouched from `/home/ryan/docker-compose.yml` |
-| **Lidarr** | `linuxserver/lidarr:latest` | **8686** | Untouched from `/home/ryan/docker-compose.yml` |
+| **Usenet Ultimate** | `ghcr.io/dsmart33/usenet-ultimate` | **1337** | Auto-patched with port 8443 TLS base URL |
+| **SABnzbd / Prowlarr / Lidarr** | *Existing Containers* | *Untouched* | **Completely ignored** to avoid Docker collisions |
 
 ---
 

@@ -19,28 +19,27 @@ import { ManifestGenerator } from './components/ManifestGenerator';
 import { UsenetAppsGuide } from './components/UsenetAppsGuide';
 import { DeploymentHub } from './components/DeploymentHub';
 import { TailscaleManager } from './components/TailscaleManager';
+import { AutoPatcher } from './components/AutoPatcher';
 import { getResolvedDomain } from './lib/templates';
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'manifest' | 'apps' | 'topology' | 'deploy' | 'tailscale'>('apps');
+  const [activeView, setActiveView] = useState<'autopatch' | 'apps' | 'manifest' | 'topology' | 'deploy' | 'tailscale'>('autopatch');
   
-  // Default configuration state matching ryan@Brain
+  // Default configuration state matching ryan@Brain (from your terminal: 192.168.4.40)
   const [config, setConfig] = useState<GatewayConfig>({
-    serverIp: '192.168.1.150',
+    serverIp: '192.168.4.40',
     guiPort: 3002,
     gatewayPort: 8443,
     nzbDavPort: 3000,
     usenetUltimatePort: 1337,
-    sabnzbdPort: 8080,
-    prowlarrPort: 9696,
-    lidarrPort: 8686,
+    usenetUltimateDir: '~/usenet-ultimate',
     dockerNetworkName: 'existing_nzbdav_network',
     domainMode: 'sslip',
     customDomain: '',
     duckDnsToken: '',
     tailscaleEnabled: false,
     tailscaleMode: 'subnet_router',
-    tailscaleSubnet: '192.168.1.0/24',
+    tailscaleSubnet: '192.168.4.0/24',
     tailscaleAuthKey: '',
     usenetProviderHost: 'news.usenetserver.com',
     usenetProviderPort: 563,
@@ -139,6 +138,18 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 overflow-x-auto py-2.5 no-scrollbar">
             <button
+              onClick={() => setActiveView('autopatch')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 shrink-0 ${
+                activeView === 'autopatch'
+                  ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <span className="text-amber-300">⚡</span>
+              Auto-Configure UU_BASE_URL
+            </button>
+
+            <button
               onClick={() => setActiveView('apps')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 shrink-0 ${
                 activeView === 'apps'
@@ -147,7 +158,7 @@ export default function App() {
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              Usenet Apps Guide (What to Put Where)
+              Usenet Apps Guide
             </button>
 
             <button
@@ -206,8 +217,16 @@ export default function App() {
 
       {/* Main Body Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {activeView === 'autopatch' && (
+          <div className="space-y-6">
+            <AutoPatcher config={config} onChangeConfig={setConfig} />
+            <UsenetAppsGuide config={config} />
+          </div>
+        )}
+
         {activeView === 'apps' && (
           <div className="space-y-6">
+            <AutoPatcher config={config} onChangeConfig={setConfig} />
             <UsenetAppsGuide config={config} />
             <ManifestGenerator config={config} onChangeConfig={setConfig} />
           </div>
@@ -215,6 +234,7 @@ export default function App() {
 
         {activeView === 'manifest' && (
           <div className="space-y-6">
+            <AutoPatcher config={config} onChangeConfig={setConfig} />
             <ManifestGenerator config={config} onChangeConfig={setConfig} />
             <UsenetAppsGuide config={config} />
           </div>
