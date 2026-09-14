@@ -178,23 +178,13 @@ export function generateDockerCompose(config: GatewayConfig): string {
 # TS-Skipper (Tailscale Skipper) - Docker Compose
 # Repository: https://github.com/ReyesPascal/TS-Skipper
 # Configured specifically for ryan@Brain:
-# - TS-Skipper GUI runs on port ${config.guiPort} (preserves nzbdav on 3000!)
+# - Serves Web GUI on port ${config.guiPort}
 # - Caddy Gateway runs on port ${config.gatewayPort} (Apple ATS HTTPS)
 # - Connects to existing nzbdav (3000) and usenet-ultimate (1337)
+# - Completely ignores sab/prowlarr/lidarr (Zero Container Collisions!)
 # ==============================================================================
 services:
-  # TS-Skipper Localhost GUI (runs on port ${config.guiPort})
-  ts-skipper-gui:
-    image: ghcr.io/reyespascal/ts-skipper:latest
-    container_name: ts-skipper-gui
-    restart: unless-stopped
-    ports:
-      - "${config.guiPort}:3000"
-    environment:
-      - PORT=3000
-      - HOST=0.0.0.0
-
-  # Caddy Reverse Proxy (automated TLS on port ${config.gatewayPort} for Apple ATS)
+  # Caddy Reverse Proxy & Web GUI Dashboard
   caddy-gateway:
     image: caddy:2-alpine
     container_name: ts-skipper-caddy
@@ -202,13 +192,16 @@ services:
     ports:
       - "${config.gatewayPort}:${config.gatewayPort}"
       - "80:80"
+      - "${config.guiPort}:${config.guiPort}"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy_data:/data
       - ./caddy_config:/config
+      - ./www:/var/www/ts-skipper:ro
     environment:
       - DOMAIN=${domain}
       - GATEWAY_PORT=${config.gatewayPort}
+      - GUI_PORT=${config.guiPort}
       - NZBDAV_PORT=${config.nzbDavPort}
       - USENET_ULTIMATE_PORT=${config.usenetUltimatePort}
     extra_hosts:
@@ -226,9 +219,18 @@ export function generateCaddyfile(config: GatewayConfig): string {
   return `# Caddyfile: TS-Skipper Gateway
 # Repository: https://github.com/ReyesPascal/TS-Skipper
 # Configured for ryan@Brain:
+# - Serves Web GUI on :${config.guiPort}
 # - Manifest & metadata -> usenet-ultimate (127.0.0.1:${config.usenetUltimatePort})
 # - Video streams & chunks -> nzbdav (127.0.0.1:${config.nzbDavPort})
 
+# 1. Local TS-Skipper Web GUI Dashboard (:3002)
+:${config.guiPort} {
+  root * /var/www/ts-skipper
+  file_server
+  try_files {path} /index.html
+}
+
+# 2. HTTPS Gateway for Apple TV / Stremio (Apple ATS Compliant)
 ${domain}:${config.gatewayPort} {
   # Apple ATS & Stremio CORS headers
   header {
@@ -390,6 +392,14 @@ mkdir -p "\${INSTALL_DIR}"
 cd "\${INSTALL_DIR}"
 
 cat <<EOF > "\${INSTALL_DIR}/Caddyfile"
+# TS-Skipper Web GUI Dashboard (Port ${config.guiPort})
+:${config.guiPort} {
+  root * /var/www/ts-skipper
+  file_server
+  try_files {path} /index.html
+}
+
+# Apple ATS HTTPS Gateway (Port ${config.gatewayPort})
 \${DOMAIN}:${config.gatewayPort} {
   header {
     Access-Control-Allow-Origin *
@@ -400,11 +410,27 @@ cat <<EOF > "\${INSTALL_DIR}/Caddyfile"
   }
 
   handle /manifest.json {
+    reverse_proxy host.docker.internal:${config.usenetUltimatePort} {
+      header_up Host {upstream_hostport}
+    }
+  }
+
+  handle /configure* {
+    reverse_proxy host.docker.internal:${config.usenetUltimatePort}
+  }
+
+  handle /catalog* {
+    reverse_proxy host.docker.internal:${config.usenetUltimatePort}
+  }
+
+  handle /meta* {
     reverse_proxy host.docker.internal:${config.usenetUltimatePort}
   }
 
   handle /stream/* {
-    reverse_proxy host.docker.internal:${config.nzbDavPort}
+    reverse_proxy host.docker.internal:${config.nzbDavPort} {
+      header_up Host {upstream_hostport}
+    }
   }
 
   handle /webdav/* {
@@ -417,6 +443,141 @@ cat <<EOF > "\${INSTALL_DIR}/Caddyfile"
 }
 EOF
 
+# Create www directory for GUI Dashboard
+mkdir -p "\${INSTALL_DIR}/www"
+cat <<'EOF' > "\${INSTALL_DIR}/www/index.html"
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TS-Skipper Gateway Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    code, pre { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 sm:p-8">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-xl">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center text-xl shadow-lg shadow-purple-600/30">⚡</div>
+        <div>
+          <h1 class="text-xl font-bold text-white flex items-center gap-2">
+            TS-Skipper Gateway
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">v2.1 Online</span>
+          </h1>
+          <p class="text-xs text-slate-400">Zero-Tailscale Usenet TLS Gateway for Apple TV & Stremio</p>
+        </div>
+      </div>
+      <span class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-mono" id="server-host">Detecting Host...</span>
+    </header>
+
+    <div class="p-6 bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-800/50 rounded-2xl space-y-4 shadow-xl">
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-purple-400 font-mono">Ready for Apple TV / iOS / PC</span>
+          <h2 class="text-base font-bold text-white">Your Stremio Addon Manifest URL</h2>
+        </div>
+        <span class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs border border-emerald-500/30 font-semibold flex items-center gap-1">✓ Apple ATS Compliant</span>
+      </div>
+
+      <div class="relative group">
+        <input type="text" id="manifest-url-input" readonly class="w-full bg-slate-950 border border-purple-800/60 rounded-xl p-3.5 pr-28 text-sm font-mono text-purple-200 select-all focus:outline-none" value="" />
+        <button onclick="copyManifestUrl()" id="copy-btn" class="absolute top-2 right-2 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
+          <span>Copy URL</span>
+        </button>
+      </div>
+
+      <div class="flex flex-wrap gap-2.5 pt-1">
+        <a id="test-manifest-link" href="#" target="_blank" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors flex items-center gap-2">
+          <span>Test Manifest in Browser ↗</span>
+        </a>
+        <a id="stremio-deeplink" href="#" class="px-3.5 py-2 rounded-xl bg-purple-900/60 hover:bg-purple-800/60 border border-purple-700/50 text-xs font-medium text-purple-200 transition-colors flex items-center gap-2">
+          <span>1-Click Open in Stremio 📺</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+      <div class="p-4 bg-slate-900 border border-slate-800 rounded-xl">
+        <span class="text-[11px] text-slate-400 block font-mono">Web GUI</span>
+        <span class="text-sm font-bold text-cyan-400 font-mono">:${config.guiPort}</span>
+        <span class="text-[10px] text-emerald-400 block mt-1">● Active</span>
+      </div>
+      <div class="p-4 bg-slate-900 border border-slate-800 rounded-xl">
+        <span class="text-[11px] text-slate-400 block font-mono">TLS Gateway</span>
+        <span class="text-sm font-bold text-emerald-400 font-mono">:${config.gatewayPort}</span>
+        <span class="text-[10px] text-emerald-400 block mt-1">● HTTPS / ATS</span>
+      </div>
+      <div class="p-4 bg-slate-900 border border-slate-800 rounded-xl">
+        <span class="text-[11px] text-slate-400 block font-mono">Usenet Ultimate</span>
+        <span class="text-sm font-bold text-purple-400 font-mono">:${config.usenetUltimatePort}</span>
+        <span class="text-[10px] text-purple-400 block mt-1">● Bridged</span>
+      </div>
+      <div class="p-4 bg-slate-900 border border-slate-800 rounded-xl">
+        <span class="text-[11px] text-slate-400 block font-mono">NZB-DAV</span>
+        <span class="text-sm font-bold text-indigo-400 font-mono">:${config.nzbDavPort}</span>
+        <span class="text-[10px] text-indigo-400 block mt-1">● WebDAV Stream</span>
+      </div>
+    </div>
+
+    <div class="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
+      <h3 class="text-sm font-bold text-white uppercase tracking-wider">Quick Commands</h3>
+      <div class="space-y-2 text-xs">
+        <div>
+          <span class="text-slate-400">One-Line Update / Reinstall:</span>
+          <div class="p-2 bg-slate-950 border border-slate-800 rounded text-purple-300 font-mono select-all mt-1">curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/install.sh | bash</div>
+        </div>
+        <div>
+          <span class="text-rose-400">One-Line Complete Uninstall:</span>
+          <div class="p-2 bg-slate-950 border border-rose-950/60 rounded text-rose-300 font-mono select-all mt-1">curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/uninstall.sh | bash</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const host = window.location.hostname;
+    const dashedIp = host.replace(/\\./g, '-');
+    const domain = (host === 'localhost' || host === '127.0.0.1') ? '${domain}' : \`\${dashedIp}.sslip.io\`;
+    const manifestUrl = \`https://\${domain}:${config.gatewayPort}/manifest.json\`;
+
+    document.getElementById('server-host').innerText = \`Host: \${host}\`;
+    document.getElementById('manifest-url-input').value = manifestUrl;
+    document.getElementById('test-manifest-link').href = manifestUrl;
+    document.getElementById('stremio-deeplink').href = manifestUrl.replace('https://', 'stremio://');
+
+    function copyManifestUrl() {
+      const input = document.getElementById('manifest-url-input');
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      const btn = document.getElementById('copy-btn');
+      btn.innerHTML = '<span>✓ Copied!</span>';
+      setTimeout(() => { btn.innerHTML = '<span>Copy URL</span>'; }, 2000);
+    }
+  </script>
+</body>
+</html>
+EOF
+
+# Write local uninstall script
+cat <<'EOF' > "\${INSTALL_DIR}/uninstall.sh"
+#!/usr/bin/env bash
+set -euo pipefail
+echo "🛑 Stopping and removing TS-Skipper..."
+cd "$(dirname "\$0")"
+docker compose down -v --remove-orphans || true
+sudo ufw delete allow ${config.gatewayPort}/tcp || true
+sudo ufw delete allow ${config.guiPort}/tcp || true
+rm -rf "\$HOME/TS-Skipper"
+echo "✅ TS-Skipper completely removed. Your Usenet containers are untouched."
+EOF
+chmod +x "\${INSTALL_DIR}/uninstall.sh"
+
 cat <<EOF > "\${INSTALL_DIR}/docker-compose.yml"
 services:
   ts-skipper-caddy:
@@ -426,10 +587,12 @@ services:
     ports:
       - "${config.gatewayPort}:${config.gatewayPort}"
       - "80:80"
+      - "${config.guiPort}:${config.guiPort}"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy_data:/data
       - ./caddy_config:/config
+      - ./www:/var/www/ts-skipper:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -438,27 +601,71 @@ volumes:
   caddy_config:
 EOF
 
-echo "🚀 Starting TS-Skipper Caddy Gateway..."
+echo "🚀 Starting TS-Skipper container (Serving GUI on :${config.guiPort} & Gateway on :${config.gatewayPort})..."
 docker compose up -d
 
 echo ""
 echo "=========================================================="
 echo "🎉 SUCCESS: TS-Skipper is Online on Port ${config.guiPort}!"
 echo "=========================================================="
-echo "🖥️  Localhost GUI: http://localhost:${config.guiPort}"
-echo "🌐 Network GUI:   http://\${LAN_IP}:${config.guiPort}"
-echo "🔒 HTTPS Gateway: https://\${DOMAIN}:${config.gatewayPort}"
-echo "📺 Stremio URL:   https://\${DOMAIN}:${config.gatewayPort}/manifest.json"
+echo "🖥️  Localhost GUI:       http://localhost:${config.guiPort} (or http://\${LAN_IP}:${config.guiPort})"
+echo "🔒 HTTPS Gateway:       https://\${DOMAIN}:${config.gatewayPort}"
+echo "📺 Stremio URL:         https://\${DOMAIN}:${config.gatewayPort}/manifest.json"
+echo "=========================================================="
+echo "🛑 ONE-LINE UNINSTALL:"
+echo "   curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/uninstall.sh | bash"
+echo "   (or run locally: bash ~/TS-Skipper/uninstall.sh)"
+echo "=========================================================="
+`;
+}
+
+export function generateUninstallScript(config: GatewayConfig): string {
+  return `#!/usr/bin/env bash
+# ==============================================================================
+# TS-Skipper - One-Command Ubuntu Uninstaller
+# Repository: https://github.com/ReyesPascal/TS-Skipper
+# One-Line Uninstall Command:
+#   curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/uninstall.sh | bash
+# ==============================================================================
+
+set -euo pipefail
+
+echo "=========================================================="
+echo "🛑 Uninstalling TS-Skipper (Tailscale Skipper)..."
+echo "Repository: https://github.com/ReyesPascal/TS-Skipper"
+echo "=========================================================="
+
+INSTALL_DIR="\${HOME}/TS-Skipper"
+
+# 1. Stop and remove Docker containers
+if [ -d "\$INSTALL_DIR" ] && [ -f "\$INSTALL_DIR/docker-compose.yml" ]; then
+    echo "🐳 Stopping TS-Skipper Docker containers..."
+    (cd "\$INSTALL_DIR" && docker compose down -v --remove-orphans || true)
+fi
+
+if docker ps -a --format '{{.Names}}' | grep -q "^ts-skipper-caddy$"; then
+    echo "🧹 Removing container ts-skipper-caddy..."
+    docker rm -f ts-skipper-caddy >/dev/null 2>&1 || true
+fi
+
+# 2. Clean up UFW firewall rules
+echo "🛡️ Cleaning up UFW firewall rules..."
+sudo ufw delete allow ${config.gatewayPort}/tcp >/dev/null 2>&1 || true
+sudo ufw delete allow ${config.guiPort}/tcp >/dev/null 2>&1 || true
+
+# 3. Remove TS-Skipper folder
+if [ -d "\$INSTALL_DIR" ]; then
+    echo "🗑️ Removing \${INSTALL_DIR} directory..."
+    rm -rf "\$INSTALL_DIR"
+fi
+
 echo ""
-echo "✨ Usenet Services (Zero Conflict):"
-echo "   - nzbdav:          port ${config.nzbDavPort} (untouched)"
-echo "   - usenet-ultimate: port ${config.usenetUltimatePort} (proxied to ${config.gatewayPort})"
-echo "   - sab/prowlarr/lidarr: completely ignored!"
-echo ""
-echo "📱 WHAT TO PUT INTO STREMIO (Apple TV / iPhone / Smart TV):"
-echo "1. In Stremio, go to Addons > Community Addons"
-echo "2. Paste: https://\${DOMAIN}:${config.gatewayPort}/manifest.json"
-echo "3. Click Install — Zero Tailscale required on client devices!"
+echo "=========================================================="
+echo "🎉 SUCCESS: TS-Skipper has been completely uninstalled!"
+echo "=========================================================="
+echo "✨ Your existing Usenet containers (nzbdav, usenet-ultimate, etc.) are untouched."
+echo "💡 To reinstall at any time, run:"
+echo "   curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/install.sh | bash"
 echo "=========================================================="
 `;
 }

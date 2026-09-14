@@ -30,6 +30,22 @@ Once installed, open the **Localhost GUI** on port **3002**:
 
 ---
 
+## 🛑 1-Command Quick Uninstall (Ubuntu)
+
+To completely remove TS-Skipper, stop its Docker container, clean up UFW firewall rules, and delete its directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/uninstall.sh | bash
+```
+
+*Or run locally:*
+```bash
+bash ~/TS-Skipper/uninstall.sh
+```
+*(Your existing containers like `nzbdav` on port 3000 and `usenet-ultimate` on port 1337 remain completely untouched).*
+
+---
+
 ## 🔍 System Port & Container Mapping (ryan@Brain)
 
 TS-Skipper fits directly into your existing configuration without needing to rebuild or change your running containers:

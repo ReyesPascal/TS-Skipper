@@ -11,7 +11,9 @@ import {
   Code2,
   Zap,
   CheckCircle2,
-  Laptop
+  Laptop,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { GatewayConfig } from '../types';
@@ -19,6 +21,7 @@ import {
   generateDockerCompose, 
   generateCaddyfile, 
   generateInstallScript, 
+  generateUninstallScript,
   generateReadme, 
   generateEnv 
 } from '../lib/templates';
@@ -28,7 +31,7 @@ interface DeploymentHubProps {
 }
 
 export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
-  const [activeTab, setActiveTab] = useState<'docker' | 'caddy' | 'install' | 'env' | 'readme'>('readme');
+  const [activeTab, setActiveTab] = useState<'docker' | 'caddy' | 'install' | 'uninstall' | 'env' | 'readme'>('readme');
   const [copiedFile, setCopiedFile] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [zipping, setZipping] = useState(false);
@@ -36,10 +39,12 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
   const dockerComposeContent = generateDockerCompose(config);
   const caddyfileContent = generateCaddyfile(config);
   const installScriptContent = generateInstallScript(config);
+  const uninstallScriptContent = generateUninstallScript(config);
   const readmeContent = generateReadme(config);
   const envContent = generateEnv(config);
 
   const oneLineInstall = `curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/install.sh | bash`;
+  const oneLineUninstall = `curl -fsSL https://raw.githubusercontent.com/ReyesPascal/TS-Skipper/main/uninstall.sh | bash`;
 
   const getCurrentContent = () => {
     switch (activeTab) {
@@ -49,6 +54,8 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
         return caddyfileContent;
       case 'install':
         return installScriptContent;
+      case 'uninstall':
+        return uninstallScriptContent;
       case 'env':
         return envContent;
       case 'readme':
@@ -76,6 +83,7 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
       zip.file('docker-compose.yml', dockerComposeContent);
       zip.file('Caddyfile', caddyfileContent);
       zip.file('install.sh', installScriptContent);
+      zip.file('uninstall.sh', uninstallScriptContent);
       zip.file('README.md', readmeContent);
       zip.file('.env.example', envContent);
       zip.file('.env', envContent);
@@ -123,12 +131,24 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
           <button
             onClick={handleDownloadZip}
             disabled={zipping}
-            className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20 self-start sm:self-auto"
+            className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20 self-start sm:self-auto cursor-pointer"
           >
             {zipping ? <Terminal className="w-4 h-4 animate-spin" /> : <FolderDown className="w-4 h-4" />}
             <span>Download TS-Skipper (.zip)</span>
           </button>
         </div>
+      </div>
+
+      {/* Screenshot Diagnostic Analysis */}
+      <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/30 space-y-2">
+        <div className="flex items-center gap-2 text-amber-300 text-xs font-semibold">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>Screenshot Analysis & Fix: Port 3002 Connection Refused</span>
+        </div>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          In your screenshot, the Caddy container started cleanly on port 8443, but navigating to <code className="text-purple-300">http://localhost:3002</code> in Brave resulted in <span className="text-rose-300 font-mono">ERR_CONNECTION_REFUSED</span>. The root cause was that port 3002 was not bound in <code className="text-slate-300">docker-compose.yml</code>. 
+          We have updated Caddy to bind <code className="text-emerald-300">:3002</code> directly and serve the self-contained TS-Skipper web dashboard. Re-running the 1-line install below will immediately fix this on your machine!
+        </p>
       </div>
 
       {/* Hero: 1-Command Ubuntu Install */}
@@ -140,10 +160,10 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
             </div>
             <div>
               <h3 className="text-sm font-bold text-white tracking-tight">
-                Simple One-Command Install on Ubuntu
+                Simple One-Command Install / Update on Ubuntu
               </h3>
               <p className="text-[11px] text-purple-300/80">
-                Installs Docker, opens UFW ports 8443 and {config.guiPort}, and boots the gateway + localhost GUI in 1 step (preserves nzbdav on 3000).
+                Installs Caddy, opens UFW firewall (8443 & {config.guiPort}), auto-patches Usenet Ultimate, and serves GUI on port {config.guiPort}.
               </p>
             </div>
           </div>
@@ -159,10 +179,55 @@ export const DeploymentHub: React.FC<DeploymentHubProps> = ({ config }) => {
             {oneLineInstall}
           </pre>
           <button
-            onClick={() => handleCopyCommand(oneLineInstall, 'oneliner')}
-            className="absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 shadow-md shadow-purple-600/30"
+            onClick={() => handleCopyCommand(oneLineInstall, 'oneliner-install')}
+            className="absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 shadow-md shadow-purple-600/30 cursor-pointer"
           >
-            {copiedCommand === 'oneliner' ? (
+            {copiedCommand === 'oneliner-install' ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-white" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Hero: 1-Command Ubuntu Uninstall */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-950 to-slate-900 border border-rose-900/50 space-y-3 shadow-lg">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300">
+              <Trash2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-tight">
+                Simple One-Command Uninstall on Ubuntu
+              </h3>
+              <p className="text-[11px] text-rose-300/80">
+                Stops TS-Skipper container, deletes UFW firewall rules, and deletes directory (nzbdav and usenet-ultimate remain untouched).
+              </p>
+            </div>
+          </div>
+
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+            Clean Removal
+          </span>
+        </div>
+
+        <div className="relative group">
+          <pre className="bg-slate-950 border border-rose-900/60 p-3.5 rounded-xl text-xs font-mono text-rose-200 overflow-x-auto select-all pr-24 leading-relaxed">
+            {oneLineUninstall}
+          </pre>
+          <button
+            onClick={() => handleCopyCommand(oneLineUninstall, 'oneliner-uninstall')}
+            className="absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 shadow-md shadow-rose-600/30 cursor-pointer"
+          >
+            {copiedCommand === 'oneliner-uninstall' ? (
               <>
                 <Check className="w-3.5 h-3.5 text-white" />
                 <span>Copied!</span>
@@ -324,6 +389,18 @@ docker compose up -d`}
             </button>
 
             <button
+              onClick={() => setActiveTab('uninstall')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'uninstall'
+                  ? 'bg-slate-800 text-white border border-slate-700'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              uninstall.sh (Uninstaller)
+            </button>
+
+            <button
               onClick={() => setActiveTab('env')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'env'
@@ -338,7 +415,7 @@ docker compose up -d`}
 
           <button
             onClick={handleCopyCurrent}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1.5 shrink-0"
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
           >
             {copiedFile ? (
               <>
@@ -361,6 +438,7 @@ docker compose up -d`}
               {activeTab === 'docker' && 'docker-compose.yml'}
               {activeTab === 'caddy' && 'Caddyfile'}
               {activeTab === 'install' && 'install.sh'}
+              {activeTab === 'uninstall' && 'uninstall.sh'}
               {activeTab === 'env' && '.env'}
               {activeTab === 'readme' && 'README.md'}
             </span>
